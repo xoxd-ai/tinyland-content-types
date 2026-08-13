@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.2
+## 0.4.0
 
 Fail-closed hardening across every runtime visibility edge (TIN-2651):
 
