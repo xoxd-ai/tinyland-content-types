@@ -16,7 +16,7 @@
           buildInputs = with pkgs; [
             bazel_8
             nodejs_22
-            (pnpm_10 or pnpm)
+            pnpm_10
           ];
           shellHook = ''
             echo "tinyland-content-types dev shell"
