@@ -45,12 +45,18 @@ export type LegacyRBACVisibility = 'public' | 'members' | 'admin' | 'private';
 
 
 
-export function migrateVisibility(legacy: string | null | undefined): ContentVisibility {
-	if (!legacy) return 'private';
+export function migrateVisibility(legacy: unknown): ContentVisibility {
+	// Fail closed (TIN-2651): anything that is not a recognized legacy string —
+	// missing, blank, unknown, or a non-string — maps to 'private', never 'public'.
+	if (legacy === undefined || legacy === null || legacy === '') return 'private';
 
-	const normalized = legacy.toLowerCase();
+	if (typeof legacy !== 'string') {
+		// Log the type only: stringifying a malformed object can itself throw.
+		console.warn(`[Visibility] Non-string visibility value (${typeof legacy}), failing closed to 'private'`);
+		return 'private';
+	}
 
-	switch (normalized) {
+	switch (legacy.toLowerCase()) {
 		case 'public':
 		case 'published':
 			return 'public';
@@ -133,10 +139,12 @@ export function getAddressingForVisibility(
 			};
 
 		default:
-			
+			// Fail closed (TIN-2651): the switch is exhaustive for ContentVisibility,
+			// but untyped runtime callers can still reach this branch — address to
+			// the author only, never to Public.
 			return {
-				to: [ACTIVITYPUB_PUBLIC],
-				cc: [followersUrl]
+				to: [actorUrl],
+				cc: []
 			};
 	}
 }

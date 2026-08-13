@@ -3,7 +3,7 @@
 
 
 
-import type { ContentVisibility } from '../visibility/index.js';
+import { migrateVisibility, type ContentVisibility } from '../visibility/index.js';
 import type { AuthorReference } from './base.js';
 import type { VideoEmbed } from './blog.js';
 
@@ -92,7 +92,8 @@ export function noteToDisplay(note: Note): NoteDisplay {
 		author: typeof frontmatter.author === 'string'
 			? frontmatter.author
 			: frontmatter.author?.handle || 'unknown',
-		visibility: frontmatter.visibility || 'public',
+		// Fail closed (TIN-2651): missing/unknown frontmatter visibility is private.
+		visibility: migrateVisibility(frontmatter.visibility),
 		inReplyTo: frontmatter.inReplyTo,
 		sensitive: frontmatter.sensitive || false,
 		spoilerText: frontmatter.spoilerText,

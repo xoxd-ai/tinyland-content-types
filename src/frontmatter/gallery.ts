@@ -4,7 +4,7 @@
 
 
 
-import type { ContentVisibility } from '../visibility/index.js';
+import { migrateVisibility, type ContentVisibility } from '../visibility/index.js';
 
 
 
@@ -119,7 +119,8 @@ export function galleryItemToDisplay(item: GalleryItem): GalleryItemDisplay {
 		author: frontmatter.author || 'unknown',
 		description: frontmatter.description || frontmatter.excerpt,
 		tags: frontmatter.tags || [],
-		visibility: frontmatter.visibility || 'public',
+		// Fail closed (TIN-2651): missing/unknown frontmatter visibility is private.
+		visibility: migrateVisibility(frontmatter.visibility),
 		likes: frontmatter.likes || 0
 	};
 }

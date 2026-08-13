@@ -27,88 +27,81 @@ const urlArb = fc.webUrl();
 
 
 
+// This table IS the migration mapping specification (TIN-2651): every input
+// outside the recognized legacy strings fails closed to 'private'.
+const MIGRATION_CASES: { label: string; input: unknown; expected: ContentVisibility }[] = [
+	// Recognized legacy values
+	{ label: "'public'", input: 'public', expected: 'public' },
+	{ label: "'published'", input: 'published', expected: 'public' },
+	{ label: "'unlisted'", input: 'unlisted', expected: 'unlisted' },
+	{ label: "'members'", input: 'members', expected: 'followers' },
+	{ label: "'followers'", input: 'followers', expected: 'followers' },
+	{ label: "'admin'", input: 'admin', expected: 'private' },
+	{ label: "'private'", input: 'private', expected: 'private' },
+	{ label: "'draft'", input: 'draft', expected: 'private' },
+	{ label: "'direct'", input: 'direct', expected: 'direct' },
+	// Case-insensitive
+	{ label: "'PUBLIC'", input: 'PUBLIC', expected: 'public' },
+	{ label: "'Members'", input: 'Members', expected: 'followers' },
+	{ label: "'PRIVATE'", input: 'PRIVATE', expected: 'private' },
+	{ label: "'Draft'", input: 'Draft', expected: 'private' },
+	// Missing / blank
+	{ label: 'undefined', input: undefined, expected: 'private' },
+	{ label: 'null', input: null, expected: 'private' },
+	{ label: 'empty string', input: '', expected: 'private' },
+	// Unknown strings and typos (no trimming: whitespace is unknown)
+	{ label: "'unknown-value'", input: 'unknown-value', expected: 'private' },
+	{ label: "'pubic' (typo)", input: 'pubic', expected: 'private' },
+	{ label: "'folowers' (typo)", input: 'folowers', expected: 'private' },
+	{ label: "' public ' (untrimmed)", input: ' public ', expected: 'private' },
+	// Wrong types
+	{ label: '0', input: 0, expected: 'private' },
+	{ label: '42', input: 42, expected: 'private' },
+	{ label: 'true', input: true, expected: 'private' },
+	{ label: 'false', input: false, expected: 'private' },
+	{ label: 'object', input: { visibility: 'public' }, expected: 'private' },
+	{ label: "['public']", input: ['public'], expected: 'private' }
+];
+
 describe('migrateVisibility', () => {
-	it('should fail closed to "private" for undefined input', () => {
-		expect(migrateVisibility(undefined)).toBe('private');
+	beforeEach(() => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
 	});
 
-	it('should fail closed to "private" for null input', () => {
-		expect(migrateVisibility(null)).toBe('private');
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
-	it('should fail closed to "private" for an empty string', () => {
-		expect(migrateVisibility('')).toBe('private');
+	it.each(MIGRATION_CASES)('$label -> $expected', ({ input, expected }) => {
+		expect(migrateVisibility(input)).toBe(expected);
 	});
 
-	it('should map "public" to "public"', () => {
-		expect(migrateVisibility('public')).toBe('public');
-	});
-
-	it('should map "published" to "public"', () => {
-		expect(migrateVisibility('published')).toBe('public');
-	});
-
-	it('should map "unlisted" to "unlisted"', () => {
-		expect(migrateVisibility('unlisted')).toBe('unlisted');
-	});
-
-	it('should map "members" to "followers"', () => {
-		expect(migrateVisibility('members')).toBe('followers');
-	});
-
-	it('should map "followers" to "followers"', () => {
-		expect(migrateVisibility('followers')).toBe('followers');
-	});
-
-	it('should map "admin" to "private"', () => {
-		expect(migrateVisibility('admin')).toBe('private');
-	});
-
-	it('should map "private" to "private"', () => {
-		expect(migrateVisibility('private')).toBe('private');
-	});
-
-	it('should map "draft" to "private"', () => {
-		expect(migrateVisibility('draft')).toBe('private');
-	});
-
-	it('should map "direct" to "direct"', () => {
-		expect(migrateVisibility('direct')).toBe('direct');
-	});
-
-	it('should be case-insensitive', () => {
-		expect(migrateVisibility('PUBLIC')).toBe('public');
-		expect(migrateVisibility('Members')).toBe('followers');
-		expect(migrateVisibility('PRIVATE')).toBe('private');
-		expect(migrateVisibility('Draft')).toBe('private');
-	});
-
-	it('should fail closed to "private" for unknown values, not "public"', () => {
-
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		expect(migrateVisibility('unknown-value')).toBe('private');
-		expect(migrateVisibility('unknown-value')).not.toBe('public');
-		expect(migrateVisibility('pubic')).toBe('private');
-		expect(migrateVisibility('folowers')).toBe('private');
-		expect(warnSpy).toHaveBeenCalledWith(
+	it('warns on unknown strings and non-strings, stays silent for missing/blank', () => {
+		migrateVisibility('unknown-value');
+		expect(console.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Unknown visibility value: unknown-value')
 		);
-		warnSpy.mockRestore();
+		migrateVisibility(42);
+		expect(console.warn).toHaveBeenCalledTimes(2);
+		migrateVisibility(undefined);
+		migrateVisibility(null);
+		migrateVisibility('');
+		expect(console.warn).toHaveBeenCalledTimes(2);
 	});
 
-	fcTest.prop([fc.string()])('never widens an unrecognized value to "public"', (value) => {
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		try {
-			const knownLegacy = ['public', 'published', 'unlisted', 'members', 'followers', 'admin', 'private', 'draft', 'direct'];
-			fc.pre(value !== '' && !knownLegacy.includes(value.toLowerCase()));
-			expect(migrateVisibility(value)).toBe('private');
-		} finally {
-			warnSpy.mockRestore();
+	fcTest.prop([fc.anything()])(
+		'maps every input to a valid ContentVisibility and only public/published to "public"',
+		(value) => {
+			const result = migrateVisibility(value);
+			expect(CONTENT_VISIBILITY_VALUES).toContain(result);
+			if (result === 'public') {
+				expect(typeof value).toBe('string');
+				expect(['public', 'published']).toContain((value as string).toLowerCase());
+			}
 		}
-	});
+	);
 
-	fcTest.prop([validVisibilityArb])('migrateVisibility is idempotent for valid values', (visibility) => {
-		
+	fcTest.prop([validVisibilityArb])('is idempotent for valid values', (visibility) => {
 		const result = migrateVisibility(visibility);
 		expect(migrateVisibility(result)).toBe(result);
 	});
@@ -174,6 +167,12 @@ describe('getAddressingForVisibility', () => {
 	it('should return empty "to" for "direct" without recipients', () => {
 		const result = getAddressingForVisibility('direct', actorUrl, followersUrl);
 		expect(result.to).toEqual([]);
+		expect(result.cc).toEqual([]);
+	});
+
+	it('fails closed to author-only addressing for unknown runtime values', () => {
+		const result = getAddressingForVisibility('bogus' as ContentVisibility, actorUrl, followersUrl);
+		expect(result.to).toEqual([actorUrl]);
 		expect(result.cc).toEqual([]);
 	});
 });
