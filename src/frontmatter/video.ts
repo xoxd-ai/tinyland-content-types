@@ -4,7 +4,7 @@
 
 
 
-import type { ContentVisibility } from '../visibility/index.js';
+import { migrateVisibility, type ContentVisibility } from '../visibility/index.js';
 import type { AuthorReference } from './base.js';
 
 
@@ -116,7 +116,8 @@ export function videoToDisplay(video: Video): VideoDisplay {
 			: frontmatter.author?.handle || 'unknown',
 		description: frontmatter.description || frontmatter.excerpt,
 		views: frontmatter.views || 0,
-		visibility: frontmatter.visibility || 'public'
+		// Fail closed (TIN-2651): missing/unknown frontmatter visibility is private.
+		visibility: migrateVisibility(frontmatter.visibility)
 	};
 }
 
